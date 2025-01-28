@@ -4,6 +4,7 @@ __pycache__/
 
 _temp/
 chroma/
+chroma*/
 logs/
 rag-chat-env/
 Modelfile

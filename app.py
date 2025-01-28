@@ -1,6 +1,7 @@
 import streamlit as st
 from query import get_query_handler
 from embed import embed
+from get_vector_db import get_vector_db, archive_current_documents  # Add import
 import os, time
 import requests
 from config import settings
@@ -80,10 +81,11 @@ def render_chat():
         st.title("🤖 AXBot", help="Your AI Assistant")
     with col3:
         selected_model = st.selectbox(
-            "",  # Empty label to remove header
+            "Select Model",  # Added non-empty label
             get_available_models(),
             index=0,
-            key="model_selector"
+            key="model_selector",
+            label_visibility="hidden"  # Hide the label but keep it for accessibility
         )
 
     # Display chat messages
@@ -94,18 +96,36 @@ def render_chat():
     # Handle new user input
     if prompt := st.chat_input("Type your message...", key="main_chat_input"):
         logger.info(f"User query: {prompt}")
+        
+        # Check if this is a yes/no response to direct chat prompt
+        last_message = st.session_state.messages[-1]["content"] if st.session_state.messages else ""
+        is_direct_prompt_response = "Would you like me to answer using general knowledge?" in last_message
+        
         # Show user message immediately
         with st.chat_message("user"):
             st.write(prompt)
         st.session_state.messages.append({"role": "user", "content": prompt})
         
-        # Show assistant response
+        # Handle assistant response
         with st.chat_message("assistant"):
             try:
                 full_response = []
                 response_container = st.empty()
                 
-                for chunk in query_handler.stream_query(prompt):
+                # Handle Yes/No response to direct chat prompt
+                if is_direct_prompt_response and prompt.lower().strip() in ['yes', 'y']:
+                    logger.info("User opted for direct chat")
+                    response_iterator = st.session_state.query_handler.stream_query(
+                        st.session_state.messages[-2]["content"],  # Get original question
+                        force_direct=True
+                    )
+                elif is_direct_prompt_response:
+                    logger.info("User declined direct chat")
+                    response_iterator = iter(["Okay, I'll only answer based on the documents I know about."])
+                else:
+                    response_iterator = st.session_state.query_handler.stream_query(prompt)
+
+                for chunk in response_iterator:
                     full_response.append(chunk)
                     response_container.markdown(
                         f'{"".join(full_response)}<span class="stream-cursor">▋</span>', 
@@ -121,6 +141,16 @@ def render_chat():
                 })
                 logger.info("Response generated successfully")
                 
+                # Show sources if available
+                sources = st.session_state.query_handler.get_last_sources()
+                if sources:
+                    st.markdown("---\n**Reference Documents:**")
+                    for idx, source in enumerate(sources, 1):
+                        with st.expander(f"Source {idx}"):
+                            st.markdown(source['content'])
+                            if source.get('metadata'):
+                                st.caption(f"Metadata: {source['metadata']}")
+                
             except Exception as e:
                 error_msg = f"Error generating response: {str(e)}"
                 st.error(error_msg)
@@ -133,13 +163,31 @@ def main():
         initial_sidebar_state="expanded"
     )
     
+    if 'query_handler' not in st.session_state:
+        st.session_state.query_handler = get_query_handler()
+    
     init_session()
-    global query_handler
-    query_handler = get_query_handler()
 
     # Simplified Sidebar
     with st.sidebar:
         st.title("📚 Documents")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🧹 Clear Chat", use_container_width=True):
+                st.session_state.messages = [{
+                    "role": "assistant",
+                    "content": get_query_handler().get_welcome_message()
+                }]
+                st.rerun()
+                
+        with col2:
+            if st.button("🗑️ New Session", use_container_width=True):
+                if archive_current_documents():
+                    st.session_state.clear()
+                    st.rerun()
+                else:
+                    st.error("Failed to archive documents")
         
         # Document Upload Section
         uploaded_files = st.file_uploader(

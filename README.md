@@ -92,7 +92,7 @@ Edit `config.py` to customize:
 
 ## License
 
-MIT License
+[MIT License](https://opensource.org/licenses/MIT)
 
 Copyright (c) 2025 Leptons1618
 

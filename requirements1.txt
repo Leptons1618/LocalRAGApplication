@@ -1,0 +1,10 @@
+streamlit
+langchain-community
+langchain-chroma
+langchain-ollama
+pydantic-settings
+werkzeug
+requests
+ollama
+python-dotenv
+chromadb[gpu]

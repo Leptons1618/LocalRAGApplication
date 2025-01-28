@@ -23,7 +23,7 @@ class QueryHandler:
         self.prompt = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
 
     def get_welcome_message(self):
-        return """**Welcome to RAG Chat!** 🌟\n\n- Upload documents to chat with them\n- Switch models in the sidebar\n- Clear history anytime"""
+        return """**Welcome to AXbot!** 🌟\n\n- Upload documents to chat with them\n- Switch models in the sidebar\n- Clear history anytime"""
 
     def stream_query(self, query: str):
         try:

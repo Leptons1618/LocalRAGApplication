@@ -22,7 +22,7 @@ A local Retrieval-Augmented Generation (RAG) chatbot powered by Ollama LLMs. Cha
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/LocalRAGApplication.git
+https://github.com/Leptons1618/LocalRAGApplication.git
 cd LocalRAGApplication
 ```
 
@@ -76,7 +76,7 @@ streamlit run app.py
 
 ## Configuration
 
-Edit `config.yaml` to customize:
+Edit `config.py` to customize:
 - LLM model selection
 - Document processing parameters
 - Vector store settings

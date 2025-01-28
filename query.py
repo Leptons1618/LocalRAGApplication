@@ -73,25 +73,23 @@ class QueryHandler:
     def _rag_chat(self, query: str):
         logger.debug("Processing RAG query")
         try:
-            retriever = get_vector_db().as_retriever(
-                search_kwargs={"k": settings.max_context_docs}
-            )
+            # Get more documents for better context
+            self.last_sources = get_relevant_sources(query, k=settings.max_context_docs)
             
-            # Get documents and format context string
-            docs = retriever.invoke(query)
-            context = "\n".join([doc.page_content for doc in docs])
+            if not self.last_sources:
+                logger.info("No relevant sources found for query")
+                for chunk in self._direct_chat(query):
+                    yield chunk
+                return
             
-            # Create fixed values for the chain
-            values = {
-                "context": context,
-                "question": query
-            }
+            # Format context from relevant sources
+            context = "\n\n".join([doc['content'] for doc in self.last_sources])
             
-            # Use the chain with fixed values
+            # Use the chain with context
             chain = self.rag_prompt | self.llm
-            
-            for chunk in chain.stream(values):
+            for chunk in chain.stream({"context": context, "question": query}):
                 yield chunk.content
+                
         except Exception as e:
             logger.error(f"RAG chat error: {str(e)}")
             yield f"Error processing query: {str(e)}"

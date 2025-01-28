@@ -1,7 +1,7 @@
 import streamlit as st
 from query import get_query_handler
 from embed import embed
-from get_vector_db import get_vector_db, archive_current_documents  # Add import
+from get_vector_db import get_vector_db, archive_current_documents, clear_documents  # Update import
 import os, time
 import requests
 from config import settings
@@ -88,10 +88,36 @@ def render_chat():
             label_visibility="hidden"  # Hide the label but keep it for accessibility
         )
 
-    # Display chat messages
+    # Display chat messages and their sources
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.write(message["content"])
+            
+            # Display sources if they exist for this message
+            if message.get("sources"):
+                st.markdown("<hr style='margin: 10px 0px'/>", unsafe_allow_html=True)
+                st.markdown("""
+                    <p style='color: #666; font-size: 0.8em; margin-bottom: 5px;'>Sources:</p>
+                """, unsafe_allow_html=True)
+                for idx, source in enumerate(message["sources"], 1):
+                    with st.expander(f"Source {idx}", expanded=False):
+                        st.markdown(f"""
+                            <div style='font-size: 0.9em; color: #444;'>
+                                {source['content']}
+                            </div>
+                        """, unsafe_allow_html=True)
+                        if source.get('similarity_score'):
+                            st.markdown(f"""
+                                <div style='font-size: 0.8em; color: #666;'>
+                                    Similarity Score: {source['similarity_score']:.4f}
+                                </div>
+                            """, unsafe_allow_html=True)
+                        if source.get('metadata'):
+                            st.markdown(f"""
+                                <div style='font-size: 0.8em; color: #666;'>
+                                    Metadata: {source['metadata']}
+                                </div>
+                            """, unsafe_allow_html=True)
 
     # Handle new user input
     if prompt := st.chat_input("Type your message...", key="main_chat_input"):
@@ -135,22 +161,44 @@ def render_chat():
                 
                 final_response = "".join(full_response)
                 response_container.markdown(final_response)
+                
+                # Get sources before adding message to history
+                sources = st.session_state.query_handler.get_last_sources()
+                
+                # Add message to history with sources
                 st.session_state.messages.append({
                     "role": "assistant", 
-                    "content": final_response
+                    "content": final_response,
+                    "sources": sources if sources else None
                 })
                 logger.info("Response generated successfully")
                 
-                # Show sources if available
-                sources = st.session_state.query_handler.get_last_sources()
+                # Show sources if available with improved formatting
                 if sources:
-                    st.markdown("---\n**Reference Documents:**")
+                    st.markdown("<hr style='margin: 10px 0px'/>", unsafe_allow_html=True)
+                    st.markdown("""
+                        <p style='color: #666; font-size: 0.8em; margin-bottom: 5px;'>Sources:</p>
+                    """, unsafe_allow_html=True)
                     for idx, source in enumerate(sources, 1):
-                        with st.expander(f"Source {idx}"):
-                            st.markdown(source['content'])
+                        with st.expander(f"Source {idx}", expanded=False):
+                            st.markdown(f"""
+                                <div style='font-size: 0.9em; color: #444;'>
+                                    {source['content']}
+                                </div>
+                            """, unsafe_allow_html=True)
                             if source.get('metadata'):
-                                st.caption(f"Metadata: {source['metadata']}")
-                
+                                st.markdown(f"""
+                                    <div style='font-size: 0.8em; color: #666;'>
+                                        {source['metadata']}
+                                    </div>
+                                """, unsafe_allow_html=True)
+                elif not is_direct_prompt_response:  # Only show no sources message if not in direct chat
+                    st.markdown("""
+                        <p style='color: #666; font-size: 0.8em; font-style: italic;'>
+                            No relevant sources found.
+                        </p>
+                    """, unsafe_allow_html=True)
+
             except Exception as e:
                 error_msg = f"Error generating response: {str(e)}"
                 st.error(error_msg)
@@ -209,11 +257,14 @@ def main():
 
         # Clear Documents Button
         if st.session_state.processed_files and st.button("🗑️ Clear Documents", use_container_width=True):
-            st.session_state.processed_files.clear()
-            st.rerun()
+            if clear_documents():
+                st.session_state.processed_files.clear()
+                st.rerun()  # Simply rerun without trying to modify file_uploader state
+            else:
+                st.error("Failed to clear documents")
 
     # Main Chat Interface
-    st.caption("Powered by Ollama LLMs")
+    # st.caption("Powered by Ollama LLMs")
     render_chat()
 
 if __name__ == "__main__":
